@@ -1,8 +1,6 @@
 #include <cstdint>
 #include <stddef.h>
-
 #include <vector>
-
 #include "utils.h"
 
 #pragma once
@@ -52,6 +50,7 @@ struct Conn {
     rbuf_woffset = 0;
     wbuf_offset = 0;
     pending_write_len = 0;
+    cmd.reset();
   }
 
   void init(int fd) {
@@ -65,6 +64,7 @@ struct Conn {
   size_t rbuf_woffset{};
   size_t wbuf_offset{};
   size_t pending_write_len{};
+  Command cmd{};
   std::vector<char> rbuf;
   std::vector<char> wbuf;
 };

@@ -101,13 +101,85 @@ int RedisServer::acceptConn() {
   return 0;
 }
 
+std::pair<std::string, int> RedisServer::execSet(Conn& c) {
+  auto &args = c.cmd.args;
+  if (args.size() != 3) {
+    return {"Invalid command args", -1};
+  }
+  auto &key = args[1];
+  auto &value = args[2];
+  kvstore.insert({key, value});
+  return {"set OK", 0};
+}
+
+std::pair<std::string, int> RedisServer::execGet(Conn& c) {
+  auto &args = c.cmd.args;
+  if (args.size() != 2) {
+    return {"Invalid command args", -1};
+  }
+  auto &key = args[1];
+  auto it  = kvstore.find(key);
+  if (it == kvstore.end()) {
+    return {key + " not found", 1};
+  }
+  return {it->second, 0};
+}
+
+std::pair<std::string, int> RedisServer::execDel(Conn& c) {
+  auto &args = c.cmd.args;
+  if (args.size() != 2) {
+    return {"Invalid command args", -1};
+  }
+  auto &key = args[1];
+  kvstore.erase(key);
+  return {"del OK", 0};
+}
+
+int RedisServer::execCommand(Conn& c) {
+  auto &cmd_type = c.cmd.args[0];
+
+  /* TODO: change to OOP maybe? */
+  std::pair<std::string, int> result;
+  if (cmd_type == "set") {
+    result = execSet(c);
+  } else if (cmd_type == "get") {
+    result = execGet(c);
+  } else if (cmd_type == "del") {
+    result = execDel(c);
+  } else {
+    // error
+    result = {"Invalid command", -1};
+  }
+
+  auto &[message, return_val] = result;
+
+  /* construct reply */
+  uint32_t ret_val = (uint32_t)return_val;
+  uint32_t resp_len = (uint32_t)message.size();
+
+  std::memcpy(c.wbuf.data() + c.wbuf_offset, &ret_val, 4);
+  c.pending_write_len += 4;
+
+  std::memcpy(c.wbuf.data() + c.wbuf_offset + 4, &resp_len, 4);
+  c.pending_write_len += 4;
+
+  if (resp_len > 0) {
+    std::memcpy(c.wbuf.data() + c.wbuf_offset + 8, message.data(), resp_len);
+    c.pending_write_len += resp_len;
+  }
+
+  // std::cout << "[DEBUG]: finished executing command. setting state to STATE_WRITE\n";
+  c.state = STATE_WRITE;
+  return RedisServer::handleWrite(c);
+}
+
 /**
  * Reads message from client and send the response accordingly.
  * 
  * The expected message is of the following format:
- * +-----+------+-----+------+--------
- * | len | msg1 | len | msg2 | more...
- * +-----+------+-----+------+--------
+ * +------+-----+------+-----+------+--------
+ * | nstr | len | msg1 | len | msg2 | more...
+ * +------+-----+------+-----+------+--------
  * 
  * Instead of first read()-ing the len and then read()-ing
  * the body, we use one read() syscall to read as many bytes as possible.
@@ -139,13 +211,26 @@ int RedisServer::handleRead(Conn& c) {
   if (c.rbuf_woffset - c.rbuf_roffset < 4) {
     /* not enough data was read. length of header is 4 bytes
      * return immediately and try to read again on the next epoll cycle */
-    std::cout << "[DEBUG]: not enough data read: " << c.rbuf_woffset - c.rbuf_roffset << "\n";
+    // std::cout << "[DEBUG]: not enough data read: " << c.rbuf_woffset - c.rbuf_roffset << "\n";
     return 1;
   }
 
   uint32_t cmd_len;
   while (c.rbuf_woffset - c.rbuf_roffset > 4) {
     // std::cout << "[DEBUG]: rbuf_roffset: " << c.rbuf_roffset << ", rbuf_woffset: " << c.rbuf_woffset << "\n";
+    if (c.cmd.isEmpty()) {
+      /* initialize command struct inside conn */
+      // std::cout << "[DEBUG]: cmd is empty. initialising\n";
+      uint32_t nstr;
+      std::memcpy(&nstr, c.rbuf.data() + c.rbuf_roffset, 4);
+      c.rbuf_roffset += 4;
+      c.cmd.args_size = nstr;
+      continue;
+    }
+
+    assert (!c.cmd.isComplete());
+
+    /* read the command arguments */
     std::memcpy(&cmd_len, c.rbuf.data() + c.rbuf_roffset, 4);
     c.rbuf_roffset += 4;
 
@@ -160,6 +245,7 @@ int RedisServer::handleRead(Conn& c) {
       /* partial read
       * shift the data to the start of the buffer
       * and try reading again on the next epoll call */
+      // std::cout << "[DEBUG]: partial read. Shifting buffer\n";
       c.rbuf_roffset -= 4; /* restore len header */
       std::memmove(c.rbuf.data(), c.rbuf.data() + c.rbuf_roffset, (c.rbuf_woffset - c.rbuf_roffset));
       c.rbuf_woffset -= c.rbuf_roffset;
@@ -171,26 +257,53 @@ int RedisServer::handleRead(Conn& c) {
     // c.rbuf[c.rbuf_roffset + cmd_len] = '\0';
     // std::cout << "[INFO]: client says " << c.rbuf.data() + c.rbuf_roffset << "\n";
     // c.rbuf[c.rbuf_roffset + cmd_len] = tmp; // restore 
-    /* TODO: parse message */
 
-    std::memcpy(c.wbuf.data(), &cmd_len, 4);
-    std::memcpy(c.wbuf.data() + 4, c.rbuf.data() + c.rbuf_roffset, cmd_len);
+    c.cmd.addArgs(std::string((char *)(c.rbuf.data() + c.rbuf_roffset), cmd_len));
     c.rbuf_roffset += cmd_len;
 
-    c.state = STATE_WRITE;
-    c.pending_write_len += 4 + cmd_len;
-    RedisServer::handleWrite(c);
+    if (c.cmd.isComplete()) {
+      /* execute command */
+
+      // std::cout << "[DEBUG]: executing command\n";
+      // std::cout << "\tcmd args: ";
+      // for (const auto &s: c.cmd.args) {
+      //   std::cout << s << " ";
+      // }
+      // std::cout << std::endl;
+
+      int err = execCommand(c);
+      if (err == -1) {
+        // std::cout << "[DEBUG]: error while executing command (must be write err). setting state to STATE_END\n";
+        c.state = STATE_END;
+        return -1;
+      }
+
+      /* reset cmd struct for next command */
+      c.cmd.reset();
+    }
   }
 
-  // assert(c.rbuf_roffset == c.rbuf_woffset);
+  /* reset read buffer offset
+   * when there is no unconsumed data in the read buffer
+   * i.e. read offset == write offset, 
+   * safely reset these offsets to 0
+   * 
+   * otherwise, move the data forward
+   * and decrement write offset */
+  if (c.rbuf_roffset != c.rbuf_woffset) {
+    std::memmove(c.rbuf.data(), c.rbuf.data() + c.rbuf_roffset, (c.rbuf_woffset - c.rbuf_roffset));
+    c.rbuf_woffset -= c.rbuf_roffset;
+  } else {
+    c.rbuf_woffset = 0;
+  }
   c.rbuf_roffset = 0;
-  c.rbuf_woffset = 0;
   return 0;
 }
 
 int RedisServer::handleWrite(Conn& c) {
   ssize_t rv = write(c.fd, c.wbuf.data() + c.wbuf_offset, c.pending_write_len);
   if (rv == -1) {
+    // std::cout << "[DEBUG]: write err. setting state to STATE_END\n";
     c.state = STATE_END;
     return -1;
   }
@@ -199,6 +312,7 @@ int RedisServer::handleWrite(Conn& c) {
   c.pending_write_len -= rv;
 
   if (c.pending_write_len == 0) {
+    // std::cout << "[DEBUG]: finished writing. setting state to STATE_READ\n";
     /* finished writing */
     c.state = STATE_READ;
     c.wbuf_offset = 0;
@@ -222,11 +336,13 @@ void RedisServer::runServer() {
         err = RedisServer::handleRead(clients[client_fd]);
         if (clients[client_fd].state == STATE_WRITE) {
           epoll_man.mod_fd(client_fd, EPOLLOUT);
+          // std::cout << "[DEBUG]: mod fd: EPOLLIN -> EPOLLOUT\n";
         }
       } else if ((events[i].events & EPOLLOUT) != 0) {
         err = RedisServer::handleWrite(clients[client_fd]);
         if (clients[client_fd].state == STATE_READ) {
           epoll_man.mod_fd(client_fd, EPOLLIN);
+          // std::cout << "[DEBUG]: mod fd: EPOLLOUT -> EPOLLIN\n";
         }
       }
 

@@ -1,5 +1,4 @@
 #include "epoll_manager.h"
-#include "utils.h"
 
 EpollManager::EpollManager() {
   epoll_fd = epoll_create1(0);

@@ -47,292 +47,214 @@ static int32_t write_all(int fd, const char *buf, size_t n) {
   return 0;
 }
 
+int32_t prepare_set_cmd(const char *key, const char *val, char *wbuf) {
+  const uint32_t nargs = 3;
+  const char *SET = "set";
 
-static int32_t query(int fd, const char *text) {
-  uint32_t len = (uint32_t)strlen(text);
-  if (len > k_max_msg) {
-    return -1;
-  }
+  uint32_t set_len = (uint32_t)strlen(SET);
+  uint32_t key_len = (uint32_t)strlen(key);
+  uint32_t val_len = (uint32_t)strlen(val);
 
-  char wbuf[4 + k_max_msg];
-  memcpy(wbuf, &len, 4);  // assume little endian
-  memcpy(&wbuf[4], text, len);
-  if (int32_t err = write_all(fd, wbuf, 4 + len)) {
-    return err;
-  }
+  size_t offset = 0;
 
-  // 4 bytes header
-  char rbuf[4 + k_max_msg + 1];
-  errno = 0;
-  int32_t err = read_full(fd, rbuf, 4);
-  if (err) {
-    if (errno == 0) {
-      msg("EOF");
-    } else {
-      msg("read() error");
-    }
-    return err;
-  }
+  memcpy(wbuf + offset, &nargs, 4); 
+  offset += 4;
 
-  memcpy(&len, rbuf, 4);  // assume little endian
-  if (len > k_max_msg) {
-    msg("too long");
-    return -1;
-  }
+  memcpy(wbuf + offset, &set_len, 4);
+  offset += 4;
+  memcpy(wbuf + offset, SET, set_len);
+  offset += set_len;
 
-  // reply body
-  err = read_full(fd, &rbuf[4], len);
-  if (err) {
-    msg("read() error");
-    return err;
-  }
+  memcpy(wbuf + offset, &key_len, 4);
+  offset += 4;
+  memcpy(wbuf + offset, key, key_len);
+  offset += key_len;
 
-  // echo back
-  rbuf[4 + len] = '\0';
-  printf("server says: %s\n", &rbuf[4]);
-  return 0;
+  memcpy(wbuf + offset, &val_len, 4);
+  offset += 4;
+  memcpy(wbuf + offset, val, val_len);
+  offset += val_len;
+
+  size_t total_message_len = 4 + (4 + 3) + (4 + key_len) + (4 + val_len);
+  assert (offset == total_message_len);
+  printf("REQUEST : set %s %s\n", key, val);
+  return total_message_len;
 }
 
-// send the same message 5x, but using only one write() syscall.
-static int32_t multiQuery(int fd, const char *text) {
-  uint32_t len = (uint32_t)strlen(text);
-  if (len > k_max_msg) {
-    return -1;
-  }
+int32_t prepare_get_cmd(const char *key, char *wbuf) {
+  const uint32_t nargs = 2;
+  const char *GET = "get";
 
-  char wbuf[4 + k_max_msg];
-  uint32_t offset = 0;
-  for (int i = 0; i < 5; ++i) {
-    memcpy(wbuf + offset, &len, 4);  // assume little endian
-    memcpy(&wbuf[4] + offset, text, len);
-    offset += (4 + len);
-  }
+  uint32_t get_len = (uint32_t)strlen(GET);
+  uint32_t key_len = (uint32_t)strlen(key);
 
-  if (int32_t err = write_all(fd, wbuf, 5 * (4 + len))) {
-    return err;
-  }
+  size_t offset = 0;
 
-  for (int i = 0; i < 5; ++i) {
-    // 4 bytes header
-    char rbuf[4 + k_max_msg + 1];
-    errno = 0;
-    int32_t err = read_full(fd, rbuf, 4);
-    if (err) {
-      if (errno == 0) {
-        msg("EOF");
-      } else {
-        msg("read() error");
-      }
-      return err;
-    }
+  memcpy(wbuf + offset, &nargs, 4); 
+  offset += 4;
 
-    memcpy(&len, rbuf, 4);  // assume little endian
-    if (len > k_max_msg) {
-      msg("too long");
-      return -1;
-    }
+  memcpy(wbuf + offset, &get_len, 4);
+  offset += 4;
+  memcpy(wbuf + offset, GET, get_len);
+  offset += get_len;
 
-    // reply body
-    err = read_full(fd, &rbuf[4], len);
-    if (err) {
-      msg("read() error");
-      return err;
-    }
+  memcpy(wbuf + offset, &key_len, 4);
+  offset += 4;
+  memcpy(wbuf + offset, key, key_len);
+  offset += key_len;
 
-    // do something
-    rbuf[4 + len] = '\0';
-    printf("server says: %s\n", &rbuf[4]);
-  }
-  return 0;
+  size_t total_message_len = 4 + (4 + 3) + (4 + key_len);
+  assert (offset == total_message_len);
+  printf("REQUEST : get %s\n", key);
+  return total_message_len;
 }
 
-int test_multiple_queries_multiple_write(int fd) {
-  int32_t err = query(fd, "hello1");
+int32_t prepare_del_cmd(const char *key, char *wbuf) {
+  const uint32_t nargs = 2;
+  const char *DEL = "del";
+
+  uint32_t del_len = (uint32_t)strlen(DEL);
+  uint32_t key_len = (uint32_t)strlen(key);
+
+  size_t offset = 0;
+
+  memcpy(wbuf + offset, &nargs, 4); 
+  offset += 4;
+
+  memcpy(wbuf + offset, &del_len, 4);
+  offset += 4;
+  memcpy(wbuf + offset, DEL, del_len);
+  offset += del_len;
+
+  memcpy(wbuf + offset, &key_len, 4);
+  offset += 4;
+  memcpy(wbuf + offset, key, key_len);
+  offset += key_len;
+
+  size_t total_message_len = 4 + (4 + 3) + (4 + key_len);
+  assert (offset == total_message_len);
+  printf("REQUEST : del %s\n", key);
+  return total_message_len;
+}
+
+int32_t prepare_malformed(char *wbuf) {
+  const uint32_t nargs = 5;
+  const char *CMD = "abcdefg";
+
+  uint32_t cmd_len = (uint32_t)strlen(CMD);
+
+  size_t offset = 0;
+
+  memcpy(wbuf + offset, &nargs, 4); 
+  offset += 4;
+
+  memcpy(wbuf + offset, &cmd_len, 4);
+  offset += 4;
+  memcpy(wbuf + offset, CMD, cmd_len);
+  offset += cmd_len;
+
+  memset(wbuf + offset, 0, 2048);
+  offset += 2048;
+
+  printf("REQUEST : %s\n", CMD);
+  return offset;
+}
+
+int32_t send_command(int fd, const char *buf, size_t len) {
+  return write_all(fd, buf, len);
+}
+
+int32_t send_command_fragmented(int fd, const char *buf, size_t len) {
+  size_t half = len / 2;
+  int32_t err = write_all(fd, buf, half);
   if (err) return err;
-  err = query(fd, "hello2");
-  if (err) return err;
-  err = query(fd, "hello3");
-  return err;
-}
-
-int test_multiple_queries_single_write(int fd) {
-  int32_t err = multiQuery(fd, "heloooo");
-  return err;
-}
-
-int test_two_max_queries_single_write(int fd) {
-  constexpr size_t two_messages_len = 2 * (k_max_msg + 4);
-  char wbuf[two_messages_len];
-  memset(wbuf, 'A', two_messages_len);
-
-  uint32_t len = (uint32_t)k_max_msg;
-  // set the length correctly
-  memcpy(wbuf, &len, 4);
-  memcpy(wbuf + k_max_msg + 4, &len, 4);
-
-  if (int32_t err = write_all(fd, wbuf, two_messages_len)) {
-    return err;
-  }
-
-  char rbuf[two_messages_len];
-  for (int i = 0; i < 2; ++i) {
-    errno = 0;
-    int32_t err = read_full(fd, rbuf, 4);
-    if (err) {
-      if (errno == 0) {
-        msg("EOF");
-      } else {
-        msg("read() error");
-      }
-      return err;
-    }
-
-    memcpy(&len, rbuf, 4);  // assume little endian
-    if (len > k_max_msg) {
-      msg("too long");
-      return -1;
-    }
-
-    // reply body
-    err = read_full(fd, &rbuf[4], len);
-    if (err) {
-      msg("read() error");
-      return err;
-    }
-
-    // echo back
-    rbuf[4 + len] = '\0';
-    printf("server says: %s\n", &rbuf[4]);
-  }
-  return 0;
-}
-
-int test_fragmented_queries1(int fd) {
-  // total buffer size = 4 (size header) + 4096 (max_msg_len) = 4100
-  // send 2 message at 2050 each -> last message will be truncated
-  // received second message: 4100 - 2054 = 2046 (incl. header)
-  char wbuf[2 * (4 + 2050)];
-  memset(wbuf, 'A', 2054);
-  memset(wbuf + 2054, 'B', 2054);
-
-  uint32_t len = 2050;
-  // set length
-  memcpy(wbuf, &len, 4);
-  memcpy(wbuf + 2050 + 4, &len, 4);
-
-  if (int32_t err = write_all(fd, wbuf, sizeof(wbuf))) {
-    return err;
-  }
-
-  char rbuf[2 * (4 + 2050)];
-  for (int i = 0; i < 2; ++i) {
-    errno = 0;
-    int32_t err = read_full(fd, rbuf, 4);
-    if (err) {
-      if (errno == 0) {
-        msg("EOF");
-      } else {
-        msg("read() error");
-      }
-      return err;
-    }
-
-    memcpy(&len, rbuf, 4);  // assume little endian
-    if (len > k_max_msg) {
-      msg("too long");
-      return -1;
-    }
-
-    // reply body
-    err = read_full(fd, &rbuf[4], len);
-    if (err) {
-      msg("read() error");
-      return err;
-    }
-
-    // echo back
-    rbuf[4 + len] = '\0';
-    printf("server says: %s\n", &rbuf[4]);
-  }
-  return 0;
-}
-
-int test_fragmented_queries2(int fd) {
-  char wbuf[4 + 100];
-  memset(wbuf, 'C', 104);
-
-  uint32_t len = 100;
-  // set the length correctly
-  memcpy(wbuf, &len, 4);
-
-  // write half
-  if (int32_t err = write_all(fd, wbuf, 50)) {
-    return err;
-  }
   sleep(3);
-  // write the next half
-  if (int32_t err = write_all(fd, wbuf+50, 54)) {
-    return err;
-  }
+  return write_all(fd, buf + half, len - half);
+}
 
-  char rbuf[4 + 100];
+int32_t receive_reply(int fd) {
+
+  /*         4 bytes return code
+   *         4 bytes message len
+   * k_max_msg bytes message body */
+
+  char rbuf[4 + 4 + k_max_msg + 1];
   errno = 0;
+
+  /* read ret code*/
   int32_t err = read_full(fd, rbuf, 4);
   if (err) {
-    if (errno == 0) {
-      msg("EOF");
-    } else {
-      msg("read() error");
-    }
+    msg("read() error");
     return err;
   }
+  uint32_t retcode;
+  memcpy(&retcode, rbuf, 4);
 
-  memcpy(&len, rbuf, 4);  // assume little endian
-  if (len > k_max_msg) {
-    msg("too long");
-    return -1;
+  /* read message len */
+  err = read_full(fd, rbuf, 4);
+  if (err) {
+    msg("read() error");
+    return err;
   }
+  uint32_t len;
+  memcpy(&len, rbuf, 4);
+  
+  /* assume server's reply length is always valid */
 
-  // reply body
-  err = read_full(fd, &rbuf[4], len);
+  /* read reply body */
+  err = read_full(fd, rbuf, len);
   if (err) {
     msg("read() error");
     return err;
   }
 
-  // echo back
-  rbuf[4 + len] = '\0';
-  printf("server says: %s\n", &rbuf[4]);
+  rbuf[len] = '\0';
+  printf("REPLY   : %s\n", rbuf);
   return 0;
 }
 
 int runTests(int fd) {
-  int err;
+  char buf[2 * k_max_msg];
+  size_t message_len;
+  /* test1: send normal request */
+  memset(buf, 0, 2 * k_max_msg);
+  message_len = prepare_set_cmd("hello", "world", buf);
+  if (send_command(fd, buf, message_len) != 0) return -1;
+  if (receive_reply(fd) != 0) return -1;
 
-  printf("===== Test: multiple queries, multiple write()s =====\n");
-  err = test_multiple_queries_multiple_write(fd);
-  if (err) return err;
+  /* test2: send fragmented command (partial read on server side) */
+  memset(buf, 0, 2 * k_max_msg);
+  message_len = prepare_set_cmd("key", "value", buf);
+  if (send_command_fragmented(fd, buf, message_len) != 0) return -1;
+  if (receive_reply(fd) != 0) return -1;
 
-  printf("===== Test: multiple queries, single write() =====\n");
-  err = test_multiple_queries_single_write(fd);
-  if (err) return err;
+  /* test3: send multiple commands using one write() call */
+  memset(buf, 0, 2 * k_max_msg);
+  message_len = prepare_get_cmd("hello", buf);
+  message_len += prepare_get_cmd("nokey", buf + message_len);
+  if (send_command_fragmented(fd, buf, message_len) != 0) return -1;
+  if (receive_reply(fd) != 0) return -1;
+  if (receive_reply(fd) != 0) return -1;
 
-  printf("===== Test: two max queries, single write() =====\n");
-  err = test_two_max_queries_single_write(fd);
-  if (err) return err;
+  /* test4: send multiple commands using one write() call, fragmented */
+  memset(buf, 0, 2 * k_max_msg);
+  message_len = prepare_del_cmd("hello000", buf);
+  message_len += prepare_get_cmd("hello", buf + message_len);
+  if (send_command_fragmented(fd, buf, message_len) != 0) return -1;
+  if (receive_reply(fd) != 0) return -1;
+  if (receive_reply(fd) != 0) return -1;
 
-  printf("===== Test: fragmented queries 1 =====\n");
-  err = test_fragmented_queries1(fd);
-  if (err) return err;
-
-  printf("===== Test: fragmented queries 2 =====\n");
-  err = test_fragmented_queries2(fd);
-  if (err) return err;
-
-  return err;
+  /* test5: send malformed commands */
+  message_len = prepare_malformed(buf);
+  if (send_command(fd, buf, message_len) != 0) return -1;
+  if (receive_reply(fd) != 0) return -1;
+  return 0;
 }
 
 int main() {
+  /* disable printf buffering */
+  setbuf(stdout, NULL);
+
   int fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) {
     die("socket()");
