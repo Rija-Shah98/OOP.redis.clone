@@ -3,8 +3,14 @@ CXXFLAGS = -pedantic -Wall -Wextra -Werror
 
 all: server client
 
-server: conn.h utils.h epoll_manager.h epoll_manager.cc server.h server.cc
-	$(CCX) $(CXXFLAGS) -O3 -o server epoll_manager.cc server.cc
+server: epoll_manager.o server.o
+	$(CCX) $(CXXFLAGS) -O3 -o server epoll_manager.o server.o
+
+server.o: conn.h utils.h epoll_manager.h server.h server.cc
+	$(CCX) $(CXXFLAGS) -c -O3 -o server.o server.cc
+
+epoll_manager.o: utils.h epoll_manager.h epoll_manager.cc 
+	$(CCX) $(CXXFLAGS) -c -O3 -o epoll_manager.o epoll_manager.cc
 
 client: client.cc
 	$(CCX) $(CXXFLAGS) -O3 -o client client.cc
