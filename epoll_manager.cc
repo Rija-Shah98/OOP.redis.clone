@@ -20,11 +20,19 @@ int EpollManager::register_fd(int fd, uint32_t flags) {
   return err;
 }
 
-int EpollManager::delete_fd(int fd, uint32_t flags) {
+int EpollManager::mod_fd(int fd, uint32_t flags) {
   struct epoll_event ev;
   ev.events = flags;
   ev.data.fd = fd;
-  int err = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, &ev);
+  int err = epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev);
+  if (err == -1) {
+    perror("[ERROR]: epoll_ctl");
+  }
+  return err;
+}
+
+int EpollManager::delete_fd(int fd) {
+  int err = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
   if (err < 0) {
     fprintf(stderr, "[ERROR]: epoll set deletion error: fd=%d\n", fd);
   }

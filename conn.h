@@ -9,7 +9,8 @@
 
 enum ConnState {
   STATE_READ,
-  STATE_WRITE
+  STATE_WRITE,
+  STATE_END
 };
 
 /**
