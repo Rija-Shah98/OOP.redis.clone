@@ -23,7 +23,7 @@ void RedisServer::startTcpServer(int port) {
   hints.ai_flags = AI_PASSIVE;
 
   if ((gai_status = getaddrinfo(nullptr, std::to_string(port).c_str(), &hints, &addresses)) != 0) {
-    std::cerr << "[ERROR]: getaddrinfo error: " << gai_strerror(gai_status) << "\n";
+    Logger::log(Logger::ERROR, "getaddrinfo error: " + std::string(gai_strerror(gai_status)));
     exit(1);
   }
 
@@ -211,16 +211,17 @@ int RedisServer::handleRead(Conn& c) {
   if (c.rbuf_woffset - c.rbuf_roffset < 4) {
     /* not enough data was read. length of header is 4 bytes
      * return immediately and try to read again on the next epoll cycle */
-    // std::cout << "[DEBUG]: not enough data read: " << c.rbuf_woffset - c.rbuf_roffset << "\n";
+    Logger::log(Logger::DEBUG, "not enough data read. waiting for next iteration.");
     return 1;
   }
 
   uint32_t cmd_len;
   while (c.rbuf_woffset - c.rbuf_roffset > 4) {
-    // std::cout << "[DEBUG]: rbuf_roffset: " << c.rbuf_roffset << ", rbuf_woffset: " << c.rbuf_woffset << "\n";
+    Logger::log(Logger::DEBUG, "read buffer offsets:"
+        " r = " + std::to_string(c.rbuf_roffset) + " w = " + std::to_string(c.rbuf_woffset));
     if (c.cmd.isEmpty()) {
       /* initialize command struct inside conn */
-      // std::cout << "[DEBUG]: cmd is empty. initialising\n";
+      Logger::log(Logger::DEBUG, "command struct is empty. initialising");
       uint32_t nstr;
       std::memcpy(&nstr, c.rbuf.data() + c.rbuf_roffset, 4);
       c.rbuf_roffset += 4;
@@ -236,7 +237,9 @@ int RedisServer::handleRead(Conn& c) {
 
     if (cmd_len > Consts::MAX_MSG_LEN) {
       /* immediately terminate errorneous client for now */
-      std::cerr << "[INFO]: received message is too long. cmd_len: " << cmd_len << " " << "fd = " << c.fd << std::endl;
+      Logger::log(Logger::INFO, "message len is too long.", false);
+      Logger::log(Logger::INFO, " len = " + std::to_string(cmd_len), false);
+      Logger::log(Logger::INFO, " fd = " + std::to_string(c.fd));
       c.state = STATE_END;
       return -1;
     }
@@ -245,7 +248,7 @@ int RedisServer::handleRead(Conn& c) {
       /* partial read
       * shift the data to the start of the buffer
       * and try reading again on the next epoll call */
-      // std::cout << "[DEBUG]: partial read. Shifting buffer\n";
+      Logger::log(Logger::DEBUG, "partial read. shifting buffer");
       c.rbuf_roffset -= 4; /* restore len header */
       std::memmove(c.rbuf.data(), c.rbuf.data() + c.rbuf_roffset, (c.rbuf_woffset - c.rbuf_roffset));
       c.rbuf_woffset -= c.rbuf_roffset;
@@ -264,16 +267,13 @@ int RedisServer::handleRead(Conn& c) {
     if (c.cmd.isComplete()) {
       /* execute command */
 
-      // std::cout << "[DEBUG]: executing command\n";
-      // std::cout << "\tcmd args: ";
-      // for (const auto &s: c.cmd.args) {
-      //   std::cout << s << " ";
-      // }
-      // std::cout << std::endl;
+      Logger::log(Logger::DEBUG, "executing command");
+      Logger::log(Logger::DEBUG, "cmd: args");
+      Logger::log(Logger::DEBUG, c.cmd.args.begin(), c.cmd.args.end());
 
       int err = execCommand(c);
       if (err == -1) {
-        // std::cout << "[DEBUG]: error while executing command (must be write err). setting state to STATE_END\n";
+        Logger::log(Logger::DEBUG, "error while executing command (write err). setting state to STATE_END");
         c.state = STATE_END;
         return -1;
       }
@@ -303,7 +303,7 @@ int RedisServer::handleRead(Conn& c) {
 int RedisServer::handleWrite(Conn& c) {
   ssize_t rv = write(c.fd, c.wbuf.data() + c.wbuf_offset, c.pending_write_len);
   if (rv == -1) {
-    // std::cout << "[DEBUG]: write err. setting state to STATE_END\n";
+    Logger::log(Logger::DEBUG, "write err. setting state to STATE_END");
     c.state = STATE_END;
     return -1;
   }
@@ -312,7 +312,7 @@ int RedisServer::handleWrite(Conn& c) {
   c.pending_write_len -= rv;
 
   if (c.pending_write_len == 0) {
-    // std::cout << "[DEBUG]: finished writing. setting state to STATE_READ\n";
+    Logger::log(Logger::DEBUG, "finished writing. setting state to STATE_READ");
     /* finished writing */
     c.state = STATE_READ;
     c.wbuf_offset = 0;
@@ -336,13 +336,13 @@ void RedisServer::runServer() {
         err = RedisServer::handleRead(clients[client_fd]);
         if (clients[client_fd].state == STATE_WRITE) {
           epoll_man.mod_fd(client_fd, EPOLLOUT);
-          // std::cout << "[DEBUG]: mod fd: EPOLLIN -> EPOLLOUT\n";
+          Logger::log(Logger::DEBUG, "mod fd: EPOLLIN -> EPOLLOUT");
         }
       } else if ((events[i].events & EPOLLOUT) != 0) {
         err = RedisServer::handleWrite(clients[client_fd]);
         if (clients[client_fd].state == STATE_READ) {
           epoll_man.mod_fd(client_fd, EPOLLIN);
-          // std::cout << "[DEBUG]: mod fd: EPOLLOUT -> EPOLLIN\n";
+          Logger::log(Logger::DEBUG, "mod fd: EPOLLOUT -> EPOLLIN");
         }
       }
 

@@ -4,7 +4,9 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <unistd.h>
-
+#include <iostream>
+#include <string>
+#include <vector>
 #pragma once
 
 namespace Consts {
@@ -25,4 +27,47 @@ inline int setnonblocking(int fd) {
 
   errno = 0;
   return fcntl(fd, F_SETFL, flags);
+}
+
+namespace Logger {
+  enum LogLevel {
+    DEBUG,
+    INFO,
+    // WARNING,
+    ERROR,
+    // CRITICAL
+  };
+
+  const std::vector<std::string> log_strings = {
+    "DEBUG",
+    "INFO",
+    "WARNING",
+    "ERROR",
+    "CRITICAL"
+  };
+
+  inline void log(LogLevel lvl, const std::string& msg, bool newline = true) {
+    bool print = (lvl != DEBUG);
+    #ifdef _DEBUG
+    print = true;
+    #endif
+    if (!print) return;
+    std::cout << "[" + log_strings[lvl] + "] " << msg;
+    if (newline) std::cout << "\n";
+  }
+
+  template<typename T>
+  void log(LogLevel lvl, T begin, T end) {
+    bool print = (lvl != DEBUG);
+    #ifdef _DEBUG
+    print = true;
+    #endif
+    if (!print) return;
+    std::cout << "[";
+    for (auto it = begin; it != end; ++it) {
+      std::cout << *it;
+      if (next(it) != end) std::cout << " ";
+    }
+    std::cout << "]\n";
+  }
 }

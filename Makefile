@@ -18,9 +18,9 @@ server.o: command.h conn.h utils.h epoll_manager.h server.h server.cc
 client: client.cc
 	$(CCX) $(CXXFLAGS) -O3 -o client client.cc
 
-debug: conn.h utils.h epoll_manager.h epoll_manager.cc server.h server.cc client.cc
-	$(CCX) $(CXXFLAGS) -g -o server epoll_manager.cc server.cc
-	$(CCX) $(CXXFLAGS) -g -o client epoll_manager.cc client.cc
+debug:
+	$(CCX) $(CXXFLAGS) -D_DEBUG -g -o server command.cc epoll_manager.cc server.cc
+	$(CCX) $(CXXFLAGS) -D_DEBUG -g -o client client.cc
 
 clean:
 	rm -f server client
