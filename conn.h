@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <stddef.h>
 #include <vector>
+#include "command.h"
 #include "utils.h"
 
 #pragma once
@@ -37,11 +38,11 @@ struct Conn {
     wbuf(Consts::SIZE_HEADER_LEN + Consts::MAX_MSG_LEN)
   {}
 
-  Conn(const Conn& other) = delete;
-  Conn& operator=(const Conn& other) = delete;
+  // Conn(const Conn& other) = delete;
+  // Conn& operator=(const Conn& other) = delete;
 
-  Conn(Conn&& other) = default;
-  Conn& operator=(Conn&& other) = default;
+  // Conn(Conn&& other) = default;
+  // Conn& operator=(Conn&& other) = default;
 
   void reset() {
     fd = -1;

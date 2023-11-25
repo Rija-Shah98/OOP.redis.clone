@@ -23,4 +23,4 @@ debug:
 	$(CCX) $(CXXFLAGS) -D_DEBUG -g -o client client.cc
 
 clean:
-	rm -f server client
+	rm -f *.o server client

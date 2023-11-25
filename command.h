@@ -1,6 +1,8 @@
 #include <string>
 #include <vector>
 
+#pragma once
+
 struct Command {
   Command();
   Command(size_t args_size);

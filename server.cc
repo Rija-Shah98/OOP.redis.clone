@@ -1,7 +1,7 @@
 #include "server.h"
 
 RedisServer::RedisServer() 
-  : clients(4096) {
+  : clients(10) {
 }
 
 /**
