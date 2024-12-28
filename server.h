@@ -1,42 +1,27 @@
-#include <cstring>
-#include <errno.h>
-#include <unistd.h>
+#pragma once
 
-#include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-
-#include <iostream>
-#include <memory>
-#include <string>
+#include <boost/asio.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <unordered_map>
+#include <string>
+#include <memory>
 #include <vector>
 
 #include "command.h"
-#include "conn.h"
-#include "epoll_manager.h"
 #include "utils.h"
-
-#pragma once
 
 class RedisServer {
 public:
-  RedisServer();
-  void startTcpServer(int port);
-  void runServer();
-  int acceptConn();
-  // Command parseRequest(Conn& c);
-  std::pair<std::string, int> execSet(Conn& c);
-  std::pair<std::string, int> execGet(Conn& c);
-  std::pair<std::string, int> execDel(Conn& c);
-  int execCommand(Conn& c);
-  int handleRead(Conn& c);
-  int handleWrite(Conn& c);
+    RedisServer(boost::asio::io_context& io_context, int port);
+    void runServer();
 
 private:
-  int server_fd;
-  EpollManager epoll_man{};
-  std::unordered_map<std::string, std::string> kvstore;
-  std::vector<Conn> clients;
+    void acceptConnection();
+    void handleRead(std::shared_ptr<boost::asio::ip::tcp::socket> socket);
+    void handleWrite(std::shared_ptr<boost::asio::ip::tcp::socket> socket, const std::string& response);
+
+    std::unordered_map<std::string, std::string> kvstore;
+
+    boost::asio::ip::tcp::acceptor acceptor_;
+    std::vector<std::shared_ptr<boost::asio::ip::tcp::socket>> clients;
 };

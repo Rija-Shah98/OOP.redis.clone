@@ -1,3 +1,14 @@
+
+# Exclude Visual Studio files and folders
+*.exe
+*.obj
 *.o
-server
-client
+.vs/
+build/
+*.log
+*.out
+# Exclude parent project folders
+../oop-project/
+../clone-redis/
+
+

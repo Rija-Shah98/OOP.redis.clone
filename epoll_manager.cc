@@ -1,44 +1,24 @@
-#include "epoll_manager.h"
+#ifndef EPOLL_MANAGER_H
+#define EPOLL_MANAGER_H
 
-EpollManager::EpollManager() {
-  epoll_fd = epoll_create1(0);
-  if (epoll_fd == -1) {
-    perror("[ERROR]: epoll_create error");
-    exit(1);
-  }
-}
+#include <boost/asio.hpp>
+#include <functional>
+#include <memory>
+#include <unordered_map>
 
-int EpollManager::register_fd(int fd, uint32_t flags) {
-  struct epoll_event ev;
-  ev.events = flags;
-  ev.data.fd = fd;
-  int err = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev);
-  if (err == -1) {
-    perror("[ERROR]: epoll_ctl");
-  }
-  return err;
-}
+class EpollManager {
+public:
+    EpollManager(); // Constructor to initialize Boost.Asio
+    ~EpollManager() = default;
 
-int EpollManager::mod_fd(int fd, uint32_t flags) {
-  struct epoll_event ev;
-  ev.events = flags;
-  ev.data.fd = fd;
-  int err = epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev);
-  if (err == -1) {
-    perror("[ERROR]: epoll_ctl");
-  }
-  return err;
-}
+    void register_fd(int fd, std::function<void(const boost::system::error_code&)> read_handler);
+    void mod_fd(int fd, std::function<void(const boost::system::error_code&)> read_handler);
+    void delete_fd(int fd);
+    void poll(); // Run the event loop to handle events
 
-int EpollManager::delete_fd(int fd) {
-  int err = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr);
-  if (err < 0) {
-    fprintf(stderr, "[ERROR]: epoll set deletion error: fd=%d\n", fd);
-  }
-  close(fd);
-  return err;
-}
+private:
+    boost::asio::io_context io_context_; // The Boost.Asio event loop
+    std::unordered_map<int, std::shared_ptr<boost::asio::ip::tcp::socket>> sockets_; // Map of file descriptors to sockets
+};
 
-int EpollManager::poll(std::vector<struct epoll_event>& events) {
-  return epoll_wait(epoll_fd, events.data(), Consts::MAX_EPOLL_EVENTS, -1);
-}
+#endif // EPOLL_MANAGER_H

@@ -1,7 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <sys/epoll.h>
+#include <boost/asio.hpp>
 #include <vector>
 #include "utils.h"
 
@@ -9,11 +6,12 @@
 
 class EpollManager {
 public:
-  EpollManager();
-  int register_fd(int fd, uint32_t flags);
-  int mod_fd(int fd, uint32_t flags);
-  int delete_fd(int fd);
-  int poll(std::vector<struct epoll_event>& events);
+	EpollManager(boost::asio::io_context& io_context);
+	void register_fd(boost::asio::ip::tcp::socket& socket);
+	void delete_fd(boost::asio::ip::tcp::socket& socket);
+	void poll();
+
 private:
-  int epoll_fd;
+	boost::asio::io_context& io_context_;
+	std::vector<std::shared_ptr<boost::asio::ip::tcp::socket>> sockets_;
 };
