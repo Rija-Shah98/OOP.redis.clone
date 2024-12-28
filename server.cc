@@ -6,6 +6,8 @@
 #include <vector>
 #include <sstream>
 #include <iterator>
+#include "server.h"
+
 
 #include "redis_server.h" // Renamed header file to match the updated naming convention
 
