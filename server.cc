@@ -11,6 +11,16 @@
 
 using boost::asio::ip::tcp;
 
+struct Connection : public std::enable_shared_from_this<Connection> {
+    explicit Connection(boost::asio::io_context& io_context)
+        : socket(io_context) {
+    }
+
+    tcp::socket socket;
+    std::string command;
+    std::vector<char> wbuf;
+};
+
 RedisServer::RedisServer(boost::asio::io_context& io_context, int port)
     : acceptor_(io_context, tcp::endpoint(tcp::v4(), port)) {
     acceptConnection();
@@ -107,3 +117,4 @@ int main() {
     }
     return 0;
 }
+
