@@ -1,5 +1,3 @@
-#pragma once
-
 #include <boost/asio.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -13,20 +11,25 @@
 
 class RedisServer {
 public:
-    // Modify the constructor to accept boost::asio::execution_context&
-    explicit RedisServer(boost::asio::execution_context& execution_context, int port);
-
+    RedisServer(boost::asio::io_context& io_context, int port);
     void runServer();
 
 private:
+    struct Connection {
+        boost::asio::ip::tcp::socket socket;
+        std::vector<char> rbuf; // Read buffer
+        std::vector<char> wbuf; // Write buffer
+        std::string command;
+
+        explicit Connection(boost::asio::io_context& io_context)
+            : socket(io_context), rbuf(1024), wbuf(1024) {
+        }
+    };
+
     void acceptConnection();
-    void handleRead(std::shared_ptr<boost::asio::ip::tcp::socket> socket);
-    void handleWrite(std::shared_ptr<boost::asio::ip::tcp::socket> socket, const std::string& response);
+    void handleRead(std::shared_ptr<Connection> conn);
+    void handleWrite(std::shared_ptr<Connection> conn, const std::string& response);
 
     std::unordered_map<std::string, std::string> kvstore;
-
-    // Use boost::asio::ip::tcp::acceptor directly with execution_context
     boost::asio::ip::tcp::acceptor acceptor_;
-    std::vector<std::shared_ptr<boost::asio::ip::tcp::socket>> clients;
 };
-
