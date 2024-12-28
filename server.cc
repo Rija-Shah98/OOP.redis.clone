@@ -7,12 +7,12 @@
 #include <sstream>
 #include <iterator>
 
-#include "server.h"
+#include "redis_server.h" // Renamed header file to match the updated naming convention
 
 using boost::asio::ip::tcp;
 
-struct Connection : public std::enable_shared_from_this<Connection> {
-    explicit Connection(boost::asio::io_context& io_context)
+struct RedisConnection : public std::enable_shared_from_this<RedisConnection> { // Changed name to "RedisConnection"
+    explicit RedisConnection(boost::asio::io_context& io_context)
         : socket(io_context) {
     }
 
@@ -24,11 +24,11 @@ struct Connection : public std::enable_shared_from_this<Connection> {
 RedisServer::RedisServer(boost::asio::io_context& io_context, int port)
     : acceptor_(io_context, tcp::endpoint(tcp::v4(), port)) {
     acceptConnection();
-    std::cout << "[INFO]: Server started on port " << port << "\n";
+    std::cout << "[INFO]: Redis server started on port " << port << "\n";
 }
 
 void RedisServer::acceptConnection() {
-    auto conn = std::make_shared<Connection>(acceptor_.get_executor().context());
+    auto conn = std::make_shared<RedisConnection>(acceptor_.get_executor().context()); // Updated to "RedisConnection"
     acceptor_.async_accept(
         conn->socket,
         [this, conn](const boost::system::error_code& error) {
@@ -43,7 +43,7 @@ void RedisServer::acceptConnection() {
         });
 }
 
-void RedisServer::handleRead(std::shared_ptr<Connection> conn) {
+void RedisServer::handleRead(std::shared_ptr<RedisConnection> conn) { // Updated to "RedisConnection"
     boost::asio::async_read_until(
         conn->socket,
         boost::asio::dynamic_buffer(conn->command),
@@ -59,7 +59,7 @@ void RedisServer::handleRead(std::shared_ptr<Connection> conn) {
         });
 }
 
-void RedisServer::handleWrite(std::shared_ptr<Connection> conn, const std::string& response) {
+void RedisServer::handleWrite(std::shared_ptr<RedisConnection> conn, const std::string& response) { // Updated to "RedisConnection"
     conn->wbuf.assign(response.begin(), response.end());
     boost::asio::async_write(
         conn->socket,
@@ -117,4 +117,5 @@ int main() {
     }
     return 0;
 }
+
 
