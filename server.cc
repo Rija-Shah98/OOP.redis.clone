@@ -1,14 +1,17 @@
 #include <boost/asio.hpp>
 #include <boost/bind/bind.hpp>
+#include <boost/asio/io_context.hpp>
 #include <iostream>
 #include <unordered_map>
 #include <memory>
+#include <sstream>
+#include <iterator>
 
 using boost::asio::ip::tcp;
 
 class RedisServer {
 public:
-    RedisServer(boost::asio::io_context& io_context, int port)
+    explicit RedisServer(boost::asio::io_context& io_context, int port)
         : acceptor_(io_context, tcp::endpoint(tcp::v4(), port)), socket_(io_context) {
         startAccept();
         std::cout << "[INFO]: Server started on port " << port << "\n";
@@ -17,8 +20,8 @@ public:
 private:
     struct Connection {
         tcp::socket socket;
-        std::vector<char> rbuf; // Read buffer
-        std::vector<char> wbuf; // Write buffer
+        std::vector<char> rbuf;  // Read buffer
+        std::vector<char> wbuf;  // Write buffer
         std::string command;
 
         explicit Connection(boost::asio::io_context& io_context)
@@ -31,6 +34,7 @@ private:
     std::unordered_map<std::string, std::string> kvstore;
 
     void startAccept() {
+        // Create a new connection object
         auto conn = std::make_shared<Connection>(acceptor_.get_executor().context());
         acceptor_.async_accept(
             conn->socket,
@@ -45,7 +49,8 @@ private:
         else {
             std::cerr << "[ERROR]: Accept error: " << error.message() << "\n";
         }
-        startAccept(); // Accept the next connection
+        // Accept the next connection
+        startAccept();
     }
 
     void startRead(std::shared_ptr<Connection> conn) {
@@ -58,7 +63,9 @@ private:
 
     void handleRead(std::shared_ptr<Connection> conn, const boost::system::error_code& error) {
         if (!error) {
+            // Process the received command
             std::string response = processCommand(conn->command);
+            conn->command.clear();  // Clear the command buffer
             startWrite(conn, response);
         }
         else {
@@ -76,7 +83,8 @@ private:
 
     void handleWrite(std::shared_ptr<Connection> conn, const boost::system::error_code& error) {
         if (!error) {
-            startRead(conn); // Continue reading commands
+            // Continue reading commands from the same connection
+            startRead(conn);
         }
         else {
             std::cerr << "[ERROR]: Write error: " << error.message() << "\n";
@@ -84,7 +92,7 @@ private:
     }
 
     std::string processCommand(const std::string& command) {
-        // Parse command
+        // Parse the command
         std::istringstream iss(command);
         std::vector<std::string> args((std::istream_iterator<std::string>(iss)),
             std::istream_iterator<std::string>());
@@ -128,3 +136,4 @@ int main() {
     }
     return 0;
 }
+
